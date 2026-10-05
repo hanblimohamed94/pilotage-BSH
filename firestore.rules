@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function isRootAdmin() {
+      return isSignedIn() && myEmail() == 'mhanbli@batisante.fr';
+    }
+    function myRoleDoc() {
+      return get(/databases/$(database)/documents/roles/$(myEmail()));
+    }
+    function isAdmin() {
+      return isRootAdmin() ||
+        (isSignedIn() && myRoleDoc().data.role == 'admin');
+    }
+
+    // Who has access, and with which role. Any signed-in user may read it
+    // (needed to show the accounts list and to self-check their own role);
+    // only an admin may add/remove an entry.
+    match /roles/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // The computed KPI snapshot, shared by everyone with access; only an
+    // admin can overwrite it (observers are read-only).
+    match /config/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Everything else stays closed by default.
+  }
+}
